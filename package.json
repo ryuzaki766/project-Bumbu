@@ -1,0 +1,18 @@
+{
+  "name": "alur-bumbu",
+  "version": "1.0.0",
+  "description": "Sistem Manajemen Alur Pesanan & Stok Bumbu Otomatis (Frontend & Backend Decoupled)",
+  "type": "module",
+  "scripts": {
+    "start": "npm run --prefix backend start",
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"npm run --prefix backend start\" \"npm run --prefix frontend dev\"",
+    "backend": "npm run --prefix backend start",
+    "frontend": "npm run --prefix frontend dev",
+    "build": "npm run --prefix frontend build",
+    "test": "node backend/scripts/simulate_flow.js",
+    "test:auth": "npm run --prefix backend test:auth"
+  },
+  "dependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
