@@ -175,8 +175,8 @@ export default function LoginScreen({ onLoggedIn }) {
                 🌿
               </div>
               <div>
-                 <h1 className="text-2xl font-black tracking-tight">Alur Bumbu</h1>
-                <p className="text-xs text-amber-200">Sistem Alur Pesanan &amp; Stok Bumbu</p> 
+                <h1 className="text-2xl font-black tracking-tight">Alur Bumbu</h1>
+                <p className="text-xs text-amber-200">Sistem Alur Pesanan &amp; Stok Bumbu</p>
               </div>
             </div>
 
@@ -210,11 +210,7 @@ export default function LoginScreen({ onLoggedIn }) {
             </div>
           </div>
 
-          <div className="text-[11px] text-slate-400 border-t border-white/10 pt-4">
-            Token login disimpan di browser dan dikirim melalui header
-            <code className="mx-1 bg-black/30 px-1.5 py-0.5 rounded text-amber-300">Authorization: Bearer</code>
-            ke setiap permintaan API.
-          </div>
+          
         </div>
 
         {/* Panel kanan: tab Login / Daftar */}
