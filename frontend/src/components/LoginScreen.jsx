@@ -175,8 +175,8 @@ export default function LoginScreen({ onLoggedIn }) {
                 🌿
               </div>
               <div>
-                <h1 className="text-2xl font-black tracking-tight">Alur Bumbu</h1>
-                <p className="text-xs text-amber-200">Sistem Alur Pesanan &amp; Stok Bumbu</p>
+                 <h1 className="text-2xl font-black tracking-tight">Alur Bumbu</h1>
+                <p className="text-xs text-amber-200">Sistem Alur Pesanan &amp; Stok Bumbu</p> 
               </div>
             </div>
 
