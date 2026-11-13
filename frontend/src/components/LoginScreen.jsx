@@ -225,8 +225,8 @@ export default function LoginScreen({ onLoggedIn }) {
             <button
               onClick={() => { setActiveTab('login'); setLoginError(''); }}
               className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-colors ${activeTab === 'login'
-                  ? 'text-orange-600 border-b-2 border-orange-500 bg-orange-50/50'
-                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                ? 'text-orange-600 border-b-2 border-orange-500 bg-orange-50/50'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
                 }`}
             >
               <LogIn className="w-4 h-4" />
@@ -235,8 +235,8 @@ export default function LoginScreen({ onLoggedIn }) {
             <button
               onClick={() => { setActiveTab('register'); setRegError(''); setRegSuccess(''); }}
               className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-colors ${activeTab === 'register'
-                  ? 'text-orange-600 border-b-2 border-orange-500 bg-orange-50/50'
-                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                ? 'text-orange-600 border-b-2 border-orange-500 bg-orange-50/50'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
                 }`}
             >
               <UserPlus className="w-4 h-4" />
