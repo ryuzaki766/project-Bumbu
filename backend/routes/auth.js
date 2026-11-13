@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../db.js';
-import { signToken, verifyPassword } from '../auth.js';
+import { signToken, verifyPassword, hashPassword } from '../auth.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -84,6 +84,120 @@ router.post('/login', (req, res) => {
 // GET /api/auth/me
 router.get('/me', authenticate, (req, res) => {
   res.json({ success: true, data: req.user });
+});
+
+// POST /api/auth/register
+router.post('/register', (req, res) => {
+  try {
+    const {
+      name,
+      username,
+      password,
+      confirmPassword,
+      role: roleInput,
+      phone = '',
+      customerType: customerTypeInput
+    } = req.body || {};
+
+    // --- Validasi field wajib ---
+    if (!name || !username || !password || !confirmPassword || !roleInput) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nama, username, password, konfirmasi password, dan peran wajib diisi.'
+      });
+    }
+
+    if (String(name).trim().length < 2) {
+      return res.status(400).json({ success: false, message: 'Nama minimal 2 karakter.' });
+    }
+
+    const usernameTrimmed = String(username).trim();
+    if (!/^[a-zA-Z0-9_.@-]{3,30}$/.test(usernameTrimmed)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username 3–30 karakter, hanya boleh huruf, angka, titik, underscore, atau strip.'
+      });
+    }
+
+    if (String(password).length < 8) {
+      return res.status(400).json({ success: false, message: 'Password minimal 8 karakter.' });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ success: false, message: 'Konfirmasi password tidak cocok.' });
+    }
+
+    // --- Pemetaan peran dari frontend ke internal ---
+    // Frontend mengirim: owner | admin | gudang | packing | customer | customer_umum
+    // Backend menyimpan: owner | admin | warehouse | packing | customer
+    const ROLE_MAP = {
+      owner: { role: 'owner', customerType: null },
+      admin: { role: 'admin', customerType: null },
+      gudang: { role: 'warehouse', customerType: null },
+      warehouse: { role: 'warehouse', customerType: null },
+      packing: { role: 'packing', customerType: null },
+      customer: { role: 'customer', customerType: customerTypeInput || 'reseller' },
+      customer_umum: { role: 'customer', customerType: 'perorangan' }
+    };
+
+    const mapped = ROLE_MAP[String(roleInput).toLowerCase()];
+    if (!mapped) {
+      return res.status(400).json({
+        success: false,
+        message: `Peran tidak valid. Pilihan: owner, admin, gudang, packing, customer, customer_umum.`
+      });
+    }
+
+    // --- Cek duplikasi username ---
+    const existing = db.findUserByUsername(usernameTrimmed);
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: 'Username sudah digunakan. Pilih username lain.'
+      });
+    }
+
+    // --- Throttle sederhana berdasarkan IP untuk register ---
+    const ipKey = `reg:${req.ip || 'unknown'}`;
+    if (isThrottled(ipKey)) {
+      return res.status(429).json({
+        success: false,
+        message: 'Terlalu banyak percobaan pendaftaran. Coba lagi dalam 15 menit.'
+      });
+    }
+
+    // --- Buat akun ---
+    const newUser = {
+      id: `user-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      username: usernameTrimmed,
+      passwordHash: hashPassword(String(password)),
+      name: String(name).trim(),
+      role: mapped.role,
+      phone: String(phone || '').trim(),
+      address: '',
+      customerType: mapped.customerType,
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+
+    db.data.users.push(newUser);
+    db.save();
+
+    loginAttempts.delete(ipKey);
+
+    const token = signToken(newUser);
+
+    res.status(201).json({
+      success: true,
+      message: `Akun berhasil dibuat. Selamat datang, ${newUser.name}!`,
+      data: {
+        token,
+        user: db.toPublicUser(newUser)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // POST /api/auth/logout

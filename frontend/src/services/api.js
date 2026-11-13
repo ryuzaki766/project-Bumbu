@@ -89,6 +89,12 @@ export const api = {
       body: JSON.stringify({ username, password })
     });
   },
+  register: async (data) => {
+    return request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
   getCurrentUser: async () => {
     return request('/auth/me');
   },
