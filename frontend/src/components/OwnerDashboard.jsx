@@ -181,7 +181,7 @@ export default function OwnerDashboard({ user, onDataChanged }) {
             title="Kirim Ringkasan Harian Mutasi Stok ke WhatsApp Owner (FR-20)"
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span>Kirim Ringkasan WA (FR-20)</span>
+            <span>Kirim Ringkasan WA</span>
           </button>
 
           <button
