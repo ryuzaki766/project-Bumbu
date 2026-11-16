@@ -197,11 +197,11 @@ export default function OwnerDashboard({ user, onDataChanged }) {
       {/* Navigation Sub-Tabs */}
       <div className="flex border-b border-slate-200 gap-2 overflow-x-auto">
         {[
-          { id: 'ringkasan', label: 'Ringkasan & Metrik (FR-24)', icon: BarChart3 },
-          { id: 'stok-fefo', label: 'Stok & Batch FEFO (FR-28, 29)', icon: Layers },
-          { id: 'audit-log', label: 'Audit Log Mutasi (FR-15, 16)', icon: Clock },
-          { id: 'whatsapp', label: 'Log Notifikasi WhatsApp (FR-22)', icon: MessageSquare },
-          { id: 'ekspor', label: 'Ekspor Excel / CSV (FR-25)', icon: FileSpreadsheet }
+          { id: 'ringkasan', label: 'Ringkasan & Metrik', icon: BarChart3 },
+          { id: 'stok-fefo', label: 'Stok & Batch FEFO ', icon: Layers },
+          { id: 'audit-log', label: 'Audit Log Mutasi', icon: Clock },
+          { id: 'whatsapp', label: 'Log Notifikasi WhatsApp', icon: MessageSquare },
+          { id: 'ekspor', label: 'Ekspor Excel / CSV ', icon: FileSpreadsheet }
         ].map(t => {
           const Icon = t.icon;
           const isActive = activeTab === t.id;
