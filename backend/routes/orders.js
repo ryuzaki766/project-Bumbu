@@ -92,9 +92,10 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
       });
     }
 
-    // Validate stock and compute totals atomically (FR-04, Section 7)
+    // Validate stock and compute totals atomically (FR-04, Pre-Order support)
     const orderItems = [];
     let totalAmount = 0;
+    let hasPreOrder = false;
 
     for (const item of items) {
       const product = db.data.products.find(p => p.id === item.productId);
@@ -114,11 +115,9 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
       }
 
       const stockSummary = db.getProductStockSummary(product.id);
-      if (qty > stockSummary.availableStock) {
-        return res.status(400).json({
-          success: false,
-          message: `Stok produk "${product.name}" tidak mencukupi. Tersedia: ${stockSummary.availableStock} ${product.unit}, diminta: ${qty} ${product.unit}. (FR-04)`
-        });
+      const isItemPreOrder = Boolean(item.isPreOrder || stockSummary.availableStock < qty);
+      if (isItemPreOrder) {
+        hasPreOrder = true;
       }
 
       // Reseller gets wholesale price, perorangan gets retail price (FR-26)
@@ -134,6 +133,7 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
         qty,
         price: unitPrice,
         subtotal,
+        isPreOrder: isItemPreOrder,
         checked: false
       });
     }
@@ -141,6 +141,11 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const randCode = Math.floor(1000 + Math.random() * 9000);
     const orderId = `ORD-${dateStr}-${randCode}`;
+
+    const initialStatus = hasPreOrder ? 'MENUNGGU_PRODUKSI' : 'MENUNGGU_DISIAPKAN';
+    const initialNote = hasPreOrder
+      ? 'Pesanan memuat item Pre-Order (stok habis dipesan). Menunggu proses produksi/restock bumbu.'
+      : 'Pesanan dibuat online dengan pembayaran COD. Stok otomatis dikunci/dicadangkan.';
 
     const newOrder = {
       id: orderId,
@@ -150,7 +155,8 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
       customerAddress: deliveryAddress,
       customerType: type,
       notes: notes || '',
-      status: 'MENUNGGU_DISIAPKAN', // Step 1
+      status: initialStatus,
+      hasPreOrder,
       paymentMethod: 'COD',
       paymentStatus: 'BELUM_LUNAS',
       courierName: null,
@@ -160,10 +166,10 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
       createdAt: new Date().toISOString(),
       statusHistory: [
         {
-          status: 'MENUNGGU_DISIAPKAN',
+          status: initialStatus,
           actor: `Customer (${customerName})`,
           timestamp: new Date().toISOString(),
-          note: `Pesanan dibuat online dengan pembayaran COD. Stok otomatis dikunci/dicadangkan.`
+          note: initialNote
         }
       ]
     };
@@ -171,23 +177,33 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
     db.data.orders.unshift(newOrder);
 
     // Customer WhatsApp confirmation notification (FR-23)
-    const itemsListText = orderItems.map(i => `• ${i.productName} (${i.qty} ${i.unit}) - Rp ${i.subtotal.toLocaleString('id-ID')}`).join('\n');
+    const itemsListText = orderItems.map(i => `• ${i.productName} (${i.qty} ${i.unit})${i.isPreOrder ? ' [PRE-ORDER]' : ''} - Rp ${i.subtotal.toLocaleString('id-ID')}`).join('\n');
     const waCustomerMsg = `Terima kasih *${customerName}*! Pesanan bumbu Anda telah kami terima:\n\n` +
       `🧾 *ID Pesanan*: ${orderId}\n` +
       `👤 *Tipe*: ${type === 'reseller' ? 'Reseller (Kulakan Harga Grosir)' : 'Perorangan (Harga Eceran)'}\n` +
       `📦 *Rincian Pesanan*:\n${itemsListText}\n\n` +
       `💰 *Total Pembayaran COD*: *Rp ${totalAmount.toLocaleString('id-ID')}*\n` +
       `🚚 *Pengiriman*: Kurir jemput sendiri di gudang (Tanpa Ongkir)\n` +
-      `📌 *Status*: Menunggu Disiapkan Staf Gudang\n\n` +
+      `📌 *Status*: ${hasPreOrder ? '⏳ Menunggu Produksi / Restock Bumbu' : 'Menunggu Disiapkan Staf Gudang'}\n\n` +
       `Anda dapat memantau status pesanan kapan saja di website kami dengan ID ${orderId}.`;
 
     db.addNotification({
       recipientType: 'CUSTOMER',
       recipientPhone: customerPhone,
-      type: 'PESANAN_BARU',
-      title: '🛒 Konfirmasi Pesanan Baru',
+      type: hasPreOrder ? 'PREORDER_BARU' : 'PESANAN_BARU',
+      title: hasPreOrder ? '⏳ Konfirmasi Pesanan Pre-Order' : '🛒 Konfirmasi Pesanan Baru',
       message: waCustomerMsg
     });
+
+    if (hasPreOrder) {
+      db.addNotification({
+        recipientType: 'WAREHOUSE',
+        recipientPhone: db.data.settings.ownerPhone,
+        type: 'PERINGATAN_PRODUKSI',
+        title: '⚠️ Perlu Produksi: Pesanan Pre-Order Baru',
+        message: `Pesanan Pre-Order baru #${orderId} oleh ${customerName} membutuhkan produksi/restock bumbu.`
+      });
+    }
 
     db.save();
 
@@ -195,6 +211,51 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
       success: true,
       message: 'Pesanan berhasil dibuat dan stok telah dicadangkan.',
       data: newOrder
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST finish production for pre-order (Gudang/Admin/Owner: Menunggu Produksi -> Menunggu Disiapkan)
+router.post('/:id/finish-production', authenticate, authorize('warehouse', 'admin', 'owner'), (req, res) => {
+  try {
+    const order = db.data.orders.find(o => o.id === req.params.id);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Pesanan tidak ditemukan.' });
+    }
+
+    if (order.status !== 'MENUNGGU_PRODUKSI') {
+      return res.status(400).json({
+        success: false,
+        message: `Pesanan saat ini berstatus ${order.status}. Hanya pesanan dengan status MENUNGGU_PRODUKSI yang dapat dialihkan ke penyiapan.`
+      });
+    }
+
+    const actor = getActor(req, 'Staf Gudang');
+
+    order.status = 'MENUNGGU_DISIAPKAN';
+    order.statusHistory.push({
+      status: 'MENUNGGU_DISIAPKAN',
+      actor,
+      timestamp: new Date().toISOString(),
+      note: 'Stok bumbu telah selesai diproduksi/tersedia di rak. Pesanan siap diambil dan disiapkan staf gudang.'
+    });
+
+    db.addNotification({
+      recipientType: 'CUSTOMER',
+      recipientPhone: order.customerPhone,
+      type: 'PRODUKSI_SELESAI',
+      title: '🌿 Bumbu Selesai Diproduksi',
+      message: `Kabar baik *${order.customerName}*! Bumbu pesanan Pre-Order #${order.id} telah selesai diproduksi dan sekarang siap disiapkan staf gudang.`
+    });
+
+    db.save();
+
+    res.json({
+      success: true,
+      message: `Pesanan #${order.id} berhasil dimajukan ke status MENUNGGU_DISIAPKAN.`,
+      data: order
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

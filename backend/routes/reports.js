@@ -23,6 +23,7 @@ router.get('/dashboard', authenticate, authorize('owner'), (req, res) => {
 
     // Order counts by status
     const orderStatusCounts = {
+      MENUNGGU_PRODUKSI: 0,
       MENUNGGU_DISIAPKAN: 0,
       SIAP_DIPACKING: 0,
       SUDAH_DIPACKING: 0,

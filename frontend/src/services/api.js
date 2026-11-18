@@ -115,6 +115,20 @@ export const api = {
       body: JSON.stringify(data)
     });
   },
+  updateProduct: async (id, data) => {
+    return request(`/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+  deleteProduct: async (id) => {
+    return request(`/products/${id}`, {
+      method: 'DELETE'
+    });
+  },
+  getProductCategorySummary: async () => {
+    return request('/products/summary/categories');
+  },
   recordGoodsIn: async (data) => {
     return request('/products/goods-in', {
       method: 'POST',
@@ -141,6 +155,12 @@ export const api = {
   },
   createOrder: async (data) => {
     return request('/orders', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+  finishOrderProduction: async (id, data = {}) => {
+    return request(`/orders/${id}/finish-production`, {
       method: 'POST',
       body: JSON.stringify(data)
     });

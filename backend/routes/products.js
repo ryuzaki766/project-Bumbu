@@ -14,6 +14,16 @@ router.get('/', (req, res) => {
   }
 });
 
+// GET category summary table (Rp 47.000/kg nomor 1-9 & Rp 43.000/kg nomor 10-16)
+router.get('/summary/categories', (req, res) => {
+  try {
+    const summary = db.getCategorySummary();
+    res.json({ success: true, data: summary });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET single product
 router.get('/:id', (req, res) => {
   try {
@@ -28,29 +38,90 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// POST create product (khusus Owner)
-router.post('/', authenticate, authorize('owner'), (req, res) => {
+// POST create product (Owner & Admin)
+router.post('/', authenticate, authorize('owner', 'admin'), (req, res) => {
   try {
-    const { name, category, unit, priceRetail, priceWholesale, minStock, description, icon } = req.body;
-    if (!name || !unit || !priceRetail || !priceWholesale) {
-      return res.status(400).json({ success: false, message: 'Nama, satuan, harga eceran, dan harga grosir wajib diisi.' });
+    const {
+      name,
+      category,
+      unit,
+      priceRetail,
+      priceWholesale,
+      minStock,
+      description,
+      icon,
+      spiceNumber,
+      spiceCategoryGroup
+    } = req.body;
+
+    if (!name || !unit || priceRetail === undefined || priceWholesale === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nama, satuan, harga eceran, dan harga grosir wajib diisi.'
+      });
     }
 
     const newProduct = {
       id: 'prod-' + Date.now(),
-      name,
-      category: category || 'Bumbu Kering / Bubuk',
-      unit,
+      name: String(name).trim(),
+      category: category || 'Bumbu Masak',
+      unit: String(unit).trim(),
       priceRetail: Number(priceRetail),
       priceWholesale: Number(priceWholesale),
-      minStock: Number(minStock) || 10,
+      minStock: minStock !== undefined ? Number(minStock) : 10,
       description: description || '',
-      icon: icon || '🌶️'
+      icon: icon || '🌶️',
+      spiceNumber: spiceNumber ? Number(spiceNumber) : null,
+      spiceCategoryGroup: spiceCategoryGroup || (
+        spiceNumber && Number(spiceNumber) <= 9 ? 'CAT_47K' :
+        spiceNumber && Number(spiceNumber) >= 10 ? 'CAT_43K' :
+        Number(priceRetail) >= 45000 ? 'CAT_47K' : 'CAT_43K'
+      )
     };
 
     db.data.products.push(newProduct);
     db.save();
-    res.status(201).json({ success: true, data: newProduct });
+
+    const enrichedProduct = db.getProducts().find(p => p.id === newProduct.id);
+    res.status(201).json({
+      success: true,
+      message: `Produk "${newProduct.name}" berhasil ditambahkan.`,
+      data: enrichedProduct || newProduct
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PUT update product (Owner & Admin)
+router.put('/:id', authenticate, authorize('owner', 'admin'), (req, res) => {
+  try {
+    const updated = db.updateProduct(req.params.id, req.body);
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Produk tidak ditemukan.' });
+    }
+    res.json({
+      success: true,
+      message: `Produk "${updated.name}" berhasil diperbarui.`,
+      data: updated
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE product (Owner & Admin)
+router.delete('/:id', authenticate, authorize('owner', 'admin'), (req, res) => {
+  try {
+    const result = db.deleteProduct(req.params.id);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json({
+      success: true,
+      message: `Produk "${result.data.name}" berhasil dihapus.`,
+      data: result.data
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

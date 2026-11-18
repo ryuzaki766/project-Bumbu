@@ -300,8 +300,9 @@ export default function OwnerDashboard({ user, onDataChanged }) {
               Distribusi Status Seluruh Pesanan (End-to-End Workflow)
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
               {[
+                { label: 'Pre-Order Produksi', key: 'MENUNGGU_PRODUKSI', color: 'bg-amber-100 text-amber-900 border border-amber-300 font-extrabold' },
                 { label: 'Menunggu Disiapkan', key: 'MENUNGGU_DISIAPKAN', color: 'bg-amber-100 text-amber-800' },
                 { label: 'Siap Dipacking', key: 'SIAP_DIPACKING', color: 'bg-orange-100 text-orange-800' },
                 { label: 'Sudah Dipacking', key: 'SUDAH_DIPACKING', color: 'bg-blue-100 text-blue-800' },

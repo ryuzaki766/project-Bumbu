@@ -260,7 +260,7 @@ export default function AdminStaff({ user, onDataChanged }) {
               ) : (
                 filteredOrders.map(order => {
                   const isLunas = order.paymentStatus === 'LUNAS';
-                  const canCancel = ['MENUNGGU_DISIAPKAN', 'SIAP_DIPACKING', 'SUDAH_DIPACKING', 'BERMASALAH'].includes(order.status);
+                  const canCancel = ['MENUNGGU_PRODUKSI', 'MENUNGGU_DISIAPKAN', 'SIAP_DIPACKING', 'SUDAH_DIPACKING', 'BERMASALAH'].includes(order.status);
                   const canReturn = order.status === 'DIKIRIM' || order.status === 'SELESAI';
 
                   return (

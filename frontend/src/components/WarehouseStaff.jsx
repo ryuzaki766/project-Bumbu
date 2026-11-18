@@ -47,7 +47,11 @@ export default function WarehouseStaff({ user, products, onDataChanged }) {
       const res = await api.getOrders({ sort: 'oldest' });
       if (res.success) {
         // Filter orders that need preparation
-        const needed = res.data.filter(o => o.status === 'MENUNGGU_DISIAPKAN' || o.status === 'BERMASALAH');
+        const needed = res.data.filter(o => 
+          o.status === 'MENUNGGU_PRODUKSI' || 
+          o.status === 'MENUNGGU_DISIAPKAN' || 
+          o.status === 'BERMASALAH'
+        );
         setIncomingOrders(needed);
 
         // Initialize checklist state
@@ -122,10 +126,26 @@ export default function WarehouseStaff({ user, products, onDataChanged }) {
       if (res.success) {
         alert(`Pesanan #${order.id} berhasil ditandai Siap Dipacking!`);
         loadOrders();
-        onDataChanged();
+        if (onDataChanged) onDataChanged();
       }
     } catch (e) {
       alert('Gagal memperbarui status: ' + e.message);
+    }
+  };
+
+  // Mark Finish Production for Pre-Order (Menunggu Produksi -> Menunggu Disiapkan)
+  const handleFinishProduction = async (orderId) => {
+    try {
+      const res = await api.finishOrderProduction(orderId);
+      if (res.success) {
+        alert(`Pesanan #${orderId} telah selesai diproduksi dan sekarang siap disiapkan.`);
+        loadOrders();
+        if (onDataChanged) onDataChanged();
+      } else {
+        alert(res.message || 'Gagal memajukan status pesanan.');
+      }
+    } catch (e) {
+      alert('Terjadi kesalahan: ' + e.message);
     }
   };
 
@@ -305,9 +325,11 @@ export default function WarehouseStaff({ user, products, onDataChanged }) {
                             <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
                               order.status === 'BERMASALAH'
                                 ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : order.status === 'MENUNGGU_PRODUKSI'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300 font-extrabold'
+                                  : 'bg-amber-100 text-amber-800 border border-amber-200'
                             }`}>
-                              {order.status.replace(/_/g, ' ')}
+                              {order.status === 'MENUNGGU_PRODUKSI' ? '⏳ MENUNGGU PRODUKSI' : order.status.replace(/_/g, ' ')}
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 mt-0.5">
@@ -379,25 +401,37 @@ export default function WarehouseStaff({ user, products, onDataChanged }) {
 
                     {/* Actions */}
                     <div className="pt-4 mt-4 border-t border-slate-100 flex items-center gap-2">
-                      <button
-                        onClick={() => handleMarkReady(order)}
-                        className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs ${
-                          allChecked
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
-                            : 'bg-amber-600 hover:bg-amber-700 text-white'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Siap Dipacking (FR-06)</span>
-                      </button>
+                      {order.status === 'MENUNGGU_PRODUKSI' ? (
+                        <button
+                          onClick={() => handleFinishProduction(order.id)}
+                          className="flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white shadow-orange-500/20"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>✓ Stok Siap / Selesai Produksi</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleMarkReady(order)}
+                            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs ${
+                              allChecked
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
+                                : 'bg-amber-600 hover:bg-amber-700 text-white'
+                            }`}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Siap Dipacking (FR-06)</span>
+                          </button>
 
-                      <button
-                        onClick={() => setReportingOrderId(order.id)}
-                        className="px-3 py-2.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition"
-                        title="Laporkan Stok Kurang / Rusak (FR-07)"
-                      >
-                        <AlertTriangle className="w-4 h-4" />
-                      </button>
+                          <button
+                            onClick={() => setReportingOrderId(order.id)}
+                            className="px-3 py-2.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition"
+                            title="Laporkan Stok Kurang / Rusak (FR-07)"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );

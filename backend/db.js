@@ -15,6 +15,78 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+export const SPICE_CATEGORY_DEFINITIONS = [
+  {
+    key: 'CAT_47K',
+    name: 'Rp 47.000/kg (nomor 1-9)',
+    pricePerKg: 47000,
+    spiceNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    spiceCount: 9,
+    calculationText: '9 × 500',
+    totalPcs: 4500
+  },
+  {
+    key: 'CAT_43K',
+    name: 'Rp 43.000/kg (nomor 10-16)',
+    pricePerKg: 43000,
+    spiceNumbers: [10, 11, 12, 13, 14, 15, 16],
+    spiceCount: 7,
+    calculationText: '7 × 500',
+    totalPcs: 3500
+  }
+];
+
+export const SPICE_STANDARD_NAMES = [
+  { number: 1, name: 'Bumbu Bali', categoryKey: 'CAT_47K' },
+  { number: 2, name: 'Bumbu Sambel Goreng', categoryKey: 'CAT_47K' },
+  { number: 3, name: 'Bumbu Rendang', categoryKey: 'CAT_47K' },
+  { number: 4, name: 'Bumbu Rujak', categoryKey: 'CAT_47K' },
+  { number: 5, name: 'Bumbu Ayam Panggang', categoryKey: 'CAT_47K' },
+  { number: 6, name: 'Bumbu Rica-Rica', categoryKey: 'CAT_47K' },
+  { number: 7, name: 'Bumbu Krengsengan', categoryKey: 'CAT_47K' },
+  { number: 8, name: 'Bumbu Opor', categoryKey: 'CAT_47K' },
+  { number: 9, name: 'Bumbu Mie', categoryKey: 'CAT_47K' },
+  { number: 10, name: 'Bumbu Rawon', categoryKey: 'CAT_43K' },
+  { number: 11, name: 'Bumbu Soto', categoryKey: 'CAT_43K' },
+  { number: 12, name: 'Bumbu Lodeh', categoryKey: 'CAT_43K' },
+  { number: 13, name: 'Bumbu Kare', categoryKey: 'CAT_43K' },
+  { number: 14, name: 'Bumbu Gule', categoryKey: 'CAT_43K' },
+  { number: 15, name: 'Bumbu Ukep/Bacem', categoryKey: 'CAT_43K' },
+  { number: 16, name: 'Bumbu Nasi Goreng', categoryKey: 'CAT_43K' }
+];
+
+export function getSpiceCategoryInfo(product) {
+  let spiceNumber = product.spiceNumber;
+
+  if (!spiceNumber) {
+    const prodName = (product.name || '').toLowerCase();
+    for (const spec of SPICE_STANDARD_NAMES) {
+      const keyword = spec.name.toLowerCase().replace('bumbu ', '');
+      if (prodName.includes(keyword)) {
+        spiceNumber = spec.number;
+        break;
+      }
+    }
+  }
+
+  const categoryKey = product.spiceCategoryGroup || (
+    spiceNumber && spiceNumber >= 1 && spiceNumber <= 9 ? 'CAT_47K' :
+    spiceNumber && spiceNumber >= 10 && spiceNumber <= 16 ? 'CAT_43K' :
+    product.priceRetail >= 45000 ? 'CAT_47K' : 'CAT_43K'
+  );
+
+  const def = SPICE_CATEGORY_DEFINITIONS.find(d => d.key === categoryKey) || SPICE_CATEGORY_DEFINITIONS[0];
+
+  return {
+    spiceNumber: spiceNumber || null,
+    spiceCategoryGroup: def.key,
+    spiceCategoryName: def.name,
+    calculationText: def.calculationText,
+    categoryTotalPcs: def.totalPcs,
+    categoryPricePerKg: def.pricePerKg
+  };
+}
+
 /**
  * Akun demo awal. Password di-hash saat seeding; jangan gunakan password ini di production.
  */
@@ -714,7 +786,7 @@ class Database {
     const productBatches = this.data.batches.filter(b => b.productId === productId);
     const totalPhysicalStock = productBatches.reduce((acc, b) => acc + (b.currentQty || 0), 0);
 
-    const activeReservedStatuses = ['MENUNGGU_DISIAPKAN', 'SIAP_DIPACKING', 'SUDAH_DIPACKING', 'BERMASALAH'];
+    const activeReservedStatuses = ['MENUNGGU_PRODUKSI', 'MENUNGGU_DISIAPKAN', 'SIAP_DIPACKING', 'SUDAH_DIPACKING', 'BERMASALAH'];
     const reservedStock = this.data.orders
       .filter(o => activeReservedStatuses.includes(o.status))
       .reduce((acc, order) => {
@@ -738,6 +810,7 @@ class Database {
     return this.data.products.map(p => {
       const stock = this.getProductStockSummary(p.id);
       const batches = this.data.batches.filter(b => b.productId === p.id);
+      const spiceInfo = getSpiceCategoryInfo(p);
       
       const warningDays = this.data.settings.warningDaysExpiry || 30;
       let nearExpiryCount = 0;
@@ -756,12 +829,96 @@ class Database {
       return {
         ...p,
         ...stock,
+        ...spiceInfo,
         isLowStock: stock.availableStock <= p.minStock,
         nearExpiryCount,
         expiredCount,
         batchCount: batches.length
       };
     });
+  }
+
+  updateProduct(id, updateData) {
+    const product = this.data.products.find(p => p.id === id);
+    if (!product) return null;
+
+    if (updateData.name !== undefined) product.name = String(updateData.name).trim();
+    if (updateData.category !== undefined) product.category = String(updateData.category).trim();
+    if (updateData.unit !== undefined) product.unit = String(updateData.unit).trim();
+    if (updateData.priceRetail !== undefined) product.priceRetail = Number(updateData.priceRetail);
+    if (updateData.priceWholesale !== undefined) product.priceWholesale = Number(updateData.priceWholesale);
+    if (updateData.minStock !== undefined) product.minStock = Number(updateData.minStock);
+    if (updateData.description !== undefined) product.description = String(updateData.description || '').trim();
+    if (updateData.icon !== undefined) product.icon = String(updateData.icon || '🌶️').trim();
+    if (updateData.spiceNumber !== undefined) {
+      product.spiceNumber = updateData.spiceNumber ? Number(updateData.spiceNumber) : null;
+    }
+    if (updateData.spiceCategoryGroup !== undefined) {
+      product.spiceCategoryGroup = updateData.spiceCategoryGroup;
+    }
+
+    this.save();
+    return this.getProducts().find(p => p.id === id);
+  }
+
+  deleteProduct(id) {
+    const index = this.data.products.findIndex(p => p.id === id);
+    if (index === -1) {
+      return { success: false, message: 'Produk tidak ditemukan.' };
+    }
+
+    const hasBatches = this.data.batches.some(b => b.productId === id && b.currentQty > 0);
+    if (hasBatches) {
+      return {
+        success: false,
+        message: 'Produk tidak dapat dihapus karena masih memiliki batch stok aktif di gudang.'
+      };
+    }
+
+    const activeStatuses = ['MENUNGGU_DISIAPKAN', 'SIAP_DIPACKING', 'SUDAH_DIPACKING', 'DIKIRIM', 'BERMASALAH'];
+    const hasActiveOrders = this.data.orders.some(o => 
+      activeStatuses.includes(o.status) && o.items.some(it => it.productId === id)
+    );
+    if (hasActiveOrders) {
+      return {
+        success: false,
+        message: 'Produk tidak dapat dihapus karena tercatat dalam pesanan yang sedang berjalan.'
+      };
+    }
+
+    const removed = this.data.products.splice(index, 1)[0];
+    this.save();
+    return { success: true, data: removed };
+  }
+
+  getCategorySummary() {
+    return {
+      categories: [
+        {
+          category: 'Rp 47.000/kg (nomor 1-9)',
+          range: 'Nomor 1 - 9',
+          spiceCount: 9,
+          calculation: '9 × 500',
+          totalPcs: 4500,
+          pricePerKg: 47000
+        },
+        {
+          category: 'Rp 43.000/kg (nomor 10-16)',
+          range: 'Nomor 10 - 16',
+          spiceCount: 7,
+          calculation: '7 × 500',
+          totalPcs: 3500,
+          pricePerKg: 43000
+        }
+      ],
+      total: {
+        category: 'Total keseluruhan',
+        range: 'Nomor 1 - 16',
+        spiceCount: 16,
+        calculation: '16 × 500',
+        totalPcs: 8000
+      }
+    };
   }
 
   allocateFEFO(productId, qtyNeeded) {

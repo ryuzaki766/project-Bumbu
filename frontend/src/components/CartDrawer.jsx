@@ -9,7 +9,10 @@ import {
   Banknote, 
   ShieldCheck, 
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Layers,
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -32,6 +35,21 @@ export default function CartDrawer({
   if (!isOpen) return null;
 
   const totalAmount = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+
+  // Kalkulasi pesanan per kategori bumbu
+  const qtyCat47k = cart
+    .filter(item => {
+      const p = item.price;
+      return item.spiceCategoryGroup === 'CAT_47K' || p === 47000 || p === 24000 || p === 12750;
+    })
+    .reduce((acc, it) => acc + it.qty, 0);
+
+  const qtyCat43k = cart
+    .filter(item => {
+      const p = item.price;
+      return item.spiceCategoryGroup === 'CAT_43K' || p === 43000 || p === 22000 || p === 11750;
+    })
+    .reduce((acc, it) => acc + it.qty, 0);
 
   const updateQty = (productId, delta) => {
     setCart(prev => prev.map(item => {
@@ -74,7 +92,11 @@ export default function CartDrawer({
         customerAddress: customerAddress.trim(),
         customerType,
         notes: notes.trim(),
-        items: cart.map(i => ({ productId: i.productId, qty: i.qty }))
+        items: cart.map(i => ({
+          productId: i.productId,
+          qty: i.qty,
+          isPreOrder: Boolean(i.isPreOrder)
+        }))
       };
 
       const res = await api.createOrder(payload);
@@ -142,7 +164,14 @@ export default function CartDrawer({
                     className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 text-xs"
                   >
                     <div className="flex-1">
-                      <h4 className="font-bold text-slate-800">{item.productName}</h4>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-bold text-slate-800">{item.productName}</h4>
+                        {item.isPreOrder && (
+                          <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                            Pre-Order
+                          </span>
+                        )}
+                      </div>
                       <div className="text-slate-500 text-[11px] mt-0.5">
                         Rp {item.price.toLocaleString('id-ID')} / {item.unit}
                       </div>
@@ -186,8 +215,59 @@ export default function CartDrawer({
           {/* Checkout Form */}
           {cart.length > 0 && (
             <form onSubmit={handleCheckout} id="checkout-form" className="space-y-4 pt-4 border-t border-slate-200">
+              {/* Rekapitulasi Standar Kategori Bumbu Masak & Kuota Pesanan */}
+              <div className="p-3.5 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Kategori &amp; Kuota Produksi Bumbu</span>
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                    {customerType === 'reseller' ? 'Customer Reseller (Grosir)' : 'Customer Umum (Eceran)'}
+                  </span>
+                </div>
+
+                {/* Tabel mini rekap 3 baris */}
+                <div className="overflow-hidden rounded-xl border border-amber-200/80 bg-white text-[11px]">
+                  <table className="w-full text-left">
+                    <thead className="bg-amber-100/60 text-amber-950 font-bold border-b border-amber-200">
+                      <tr>
+                        <th className="py-1.5 px-2">Kategori</th>
+                        <th className="py-1.5 px-1 text-center">Jenis</th>
+                        <th className="py-1.5 px-1 text-center">Hitung</th>
+                        <th className="py-1.5 px-2 text-right">Total</th>
+                        <th className="py-1.5 px-2 text-right">Dipesan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100 text-slate-700">
+                      <tr>
+                        <td className="py-1.5 px-2 font-medium">Rp 47.000/kg (1-9)</td>
+                        <td className="py-1.5 px-1 text-center">9</td>
+                        <td className="py-1.5 px-1 text-center font-mono text-[10px]">9 × 500</td>
+                        <td className="py-1.5 px-2 text-right font-bold text-amber-800">4.500 pcs</td>
+                        <td className="py-1.5 px-2 text-right font-bold text-orange-600">{qtyCat47k} pcs</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 px-2 font-medium">Rp 43.000/kg (10-16)</td>
+                        <td className="py-1.5 px-1 text-center">7</td>
+                        <td className="py-1.5 px-1 text-center font-mono text-[10px]">7 × 500</td>
+                        <td className="py-1.5 px-2 text-right font-bold text-orange-800">3.500 pcs</td>
+                        <td className="py-1.5 px-2 text-right font-bold text-orange-600">{qtyCat43k} pcs</td>
+                      </tr>
+                      <tr className="bg-slate-900 text-white font-bold">
+                        <td className="py-1.5 px-2">Total keseluruhan</td>
+                        <td className="py-1.5 px-1 text-center">16</td>
+                        <td className="py-1.5 px-1 text-center font-mono text-[10px]">16 × 500</td>
+                        <td className="py-1.5 px-2 text-right text-amber-300">8.000 pcs</td>
+                        <td className="py-1.5 px-2 text-right text-amber-300">{qtyCat47k + qtyCat43k} pcs</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Informasi Pemesan & Pengiriman (FR-02)
+                Informasi Pemesan &amp; Pengiriman (FR-02)
               </h3>
 
               <div>
@@ -247,6 +327,18 @@ export default function CartDrawer({
 
               {/* Delivery & Payment Badges */}
               <div className="space-y-2 pt-2">
+                {cart.some(i => i.isPreOrder) && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900 flex items-start gap-2.5">
+                    <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-amber-950">Memuat Bumbu Pre-Order (Menunggu Produksi)</strong>
+                      <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                        Pesanan ini memuat bumbu yang stok fisiknya habis. Bumbu akan dimasak/diproduksi khusus untuk pesanan Anda, berstatus awal <strong>MENUNGGU PRODUKSI</strong>, dan segera disiapkan setelah batch selesai.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
                   <Truck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                   <div>

@@ -173,14 +173,17 @@ export default function App() {
       <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         {authUser.role === 'customer' && (
           <CustomerStore
+            user={authUser}
             products={products}
             customerType={customerType}
             cart={cart}
             setCart={setCart}
+            onOpenCart={() => setIsCartOpen(true)}
             onCheckoutSuccess={handleOrderCreated}
             trackedOrder={trackedOrder}
             setTrackedOrder={setTrackedOrder}
             onSearchTrackOrder={handleSearchTrackOrder}
+            onProductChanged={loadInitialData}
           />
         )}
 
