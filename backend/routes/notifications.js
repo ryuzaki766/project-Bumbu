@@ -34,7 +34,7 @@ router.get('/settings', authenticate, authorize('owner'), (req, res) => {
 });
 
 // PUT update settings (khusus Owner)
-router.put('/settings', authenticate, authorize('owner'), (req, res) => {
+router.put('/settings', authenticate, authorize('owner'), async (req, res) => {
   try {
     const { ownerPhone, ownerName, warningDaysExpiry, autoSendWhatsapp } = req.body;
 
@@ -43,7 +43,7 @@ router.put('/settings', authenticate, authorize('owner'), (req, res) => {
     if (warningDaysExpiry) db.data.settings.warningDaysExpiry = Number(warningDaysExpiry);
     if (autoSendWhatsapp !== undefined) db.data.settings.autoSendWhatsapp = !!autoSendWhatsapp;
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -56,7 +56,7 @@ router.put('/settings', authenticate, authorize('owner'), (req, res) => {
 });
 
 // POST send daily summary to Owner (FR-20, khusus Owner)
-router.post('/whatsapp/daily-summary', authenticate, authorize('owner'), (req, res) => {
+router.post('/whatsapp/daily-summary', authenticate, authorize('owner'), async (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
 
@@ -94,7 +94,7 @@ router.post('/whatsapp/daily-summary', authenticate, authorize('owner'), (req, r
       `Total Aktivitas: ${inLogs.length} penerimaan masuk, ${outLogs.length} pengiriman keluar.\n` +
       `_Sistem Otomatis Alur Bumbu_`;
 
-    const notif = db.addNotification({
+    const notif = await db.addNotification({
       recipientType: 'OWNER',
       type: 'RINGKASAN_HARIAN',
       title: '📊 Ringkasan Harian Mutasi Stok',

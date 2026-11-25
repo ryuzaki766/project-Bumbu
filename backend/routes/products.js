@@ -39,7 +39,7 @@ router.get('/:id', (req, res) => {
 });
 
 // POST create product (Owner & Admin)
-router.post('/', authenticate, authorize('owner', 'admin'), (req, res) => {
+router.post('/', authenticate, authorize('owner', 'admin'), async (req, res) => {
   try {
     const {
       name,
@@ -80,7 +80,7 @@ router.post('/', authenticate, authorize('owner', 'admin'), (req, res) => {
     };
 
     db.data.products.push(newProduct);
-    db.save();
+    await db.save();
 
     const enrichedProduct = db.getProducts().find(p => p.id === newProduct.id);
     res.status(201).json({
@@ -94,9 +94,9 @@ router.post('/', authenticate, authorize('owner', 'admin'), (req, res) => {
 });
 
 // PUT update product (Owner & Admin)
-router.put('/:id', authenticate, authorize('owner', 'admin'), (req, res) => {
+router.put('/:id', authenticate, authorize('owner', 'admin'), async (req, res) => {
   try {
-    const updated = db.updateProduct(req.params.id, req.body);
+    const updated = await db.updateProduct(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ success: false, message: 'Produk tidak ditemukan.' });
     }
@@ -111,9 +111,9 @@ router.put('/:id', authenticate, authorize('owner', 'admin'), (req, res) => {
 });
 
 // DELETE product (Owner & Admin)
-router.delete('/:id', authenticate, authorize('owner', 'admin'), (req, res) => {
+router.delete('/:id', authenticate, authorize('owner', 'admin'), async (req, res) => {
   try {
-    const result = db.deleteProduct(req.params.id);
+    const result = await db.deleteProduct(req.params.id);
     if (!result.success) {
       return res.status(400).json(result);
     }
@@ -128,7 +128,7 @@ router.delete('/:id', authenticate, authorize('owner', 'admin'), (req, res) => {
 });
 
 // POST goods in / penerimaan supplier (FR-13, FR-27, FR-18)
-router.post('/goods-in', authenticate, authorize('warehouse', 'owner'), (req, res) => {
+router.post('/goods-in', authenticate, authorize('warehouse', 'owner'), async (req, res) => {
   try {
     const { productId, batchNumber, expiryDate, qty, supplierName, notes } = req.body;
     const receiverName = getActor(req, 'Staf Gudang');
@@ -196,14 +196,14 @@ router.post('/goods-in', authenticate, authorize('warehouse', 'owner'), (req, re
       `• *Waktu*: ${new Date().toLocaleString('id-ID')}\n\n` +
       `_Sistem Otomatis Alur Bumbu_`;
 
-    db.addNotification({
+    await db.addNotification({
       recipientType: 'OWNER',
       type: 'BARANG_MASUK',
       title: '📦 Notifikasi Barang Masuk',
       message: waMessage
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -219,7 +219,7 @@ router.post('/goods-in', authenticate, authorize('warehouse', 'owner'), (req, re
 });
 
 // POST Manual stock opname adjustment (FR-16) - mandatory reason (khusus Owner)
-router.post('/adjust-stock', authenticate, authorize('owner'), (req, res) => {
+router.post('/adjust-stock', authenticate, authorize('owner'), async (req, res) => {
   try {
     const { batchId, newQty, reason } = req.body;
     const actor = getActor(req, 'Owner');
@@ -262,7 +262,7 @@ router.post('/adjust-stock', authenticate, authorize('owner'), (req, res) => {
     });
 
     // Notify owner if adjustment was made
-    db.addNotification({
+    await db.addNotification({
       recipientType: 'OWNER',
       type: 'OPNAME_ADJUSTMENT',
       title: '⚖️ Penyesuaian Stok Opname',
@@ -271,7 +271,7 @@ router.post('/adjust-stock', authenticate, authorize('owner'), (req, res) => {
         `• Alasan: ${reason}\n• Oleh: ${actor || 'Owner / Admin'}`
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,

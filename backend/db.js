@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { Redis } from '@upstash/redis';
 import { hashPassword } from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,9 +11,28 @@ const DB_FILE = process.env.DB_FILE
   ? path.resolve(process.env.DB_FILE)
   : path.join(DATA_DIR, 'database.json');
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+const isVercel = Boolean(process.env.VERCEL);
+const redisUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const redisToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const isRedisConfigured = Boolean(redisUrl && redisToken);
+const REDIS_KEY = process.env.REDIS_DB_KEY || 'alur-bumbu-db';
+
+// Ensure data directory exists only if local file mode is used
+if (!isVercel && !isRedisConfigured) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch (err) {
+    console.warn('Warning: Gagal membuat DATA_DIR:', err.message);
+  }
+}
+
+// In Vercel, Redis credentials MUST be configured
+if (isVercel && !isRedisConfigured) {
+  throw new Error(
+    'Environment VERCEL terdeteksi, tetapi kredensial Upstash Redis (KV_REST_API_URL / UPSTASH_REDIS_REST_URL dan TOKEN) belum dikonfigurasi. Vercel serverless membutuhkan Upstash Redis / Vercel KV karena filesystem bersifat read-only dan stateless.'
+  );
 }
 
 export const SPICE_CATEGORY_DEFINITIONS = [
@@ -87,6 +107,18 @@ export function getSpiceCategoryInfo(product) {
   };
 }
 
+function getSeedPassword(roleKey, defaultDevPassword) {
+  if (process.env.NODE_ENV === 'production') {
+    const envName = `SEED_${roleKey.toUpperCase()}_PASSWORD`;
+    const envVal = process.env[envName];
+    if (!envVal || envVal.trim().length === 0) {
+      throw new Error(`[SEED USER] Environment variable ${envName} wajib diisi pada environment production untuk inisialisasi akun bawaan.`);
+    }
+    return envVal.trim();
+  }
+  return defaultDevPassword;
+}
+
 /**
  * Akun demo awal. Password di-hash saat seeding; jangan gunakan password ini di production.
  */
@@ -97,7 +129,7 @@ export function getSeedUsers() {
     {
       id: 'user-owner',
       username: 'owner',
-      passwordHash: hashPassword('owner123'),
+      passwordHash: hashPassword(getSeedPassword('owner', 'owner123')),
       name: 'Pak Haji Rahmat',
       role: 'owner',
       phone: '081288990011',
@@ -109,7 +141,7 @@ export function getSeedUsers() {
     {
       id: 'user-admin',
       username: 'admin',
-      passwordHash: hashPassword('admin123'),
+      passwordHash: hashPassword(getSeedPassword('admin', 'admin123')),
       name: 'Lina (Staf Admin)',
       role: 'admin',
       phone: '081288990012',
@@ -121,7 +153,7 @@ export function getSeedUsers() {
     {
       id: 'user-warehouse',
       username: 'gudang',
-      passwordHash: hashPassword('gudang123'),
+      passwordHash: hashPassword(getSeedPassword('warehouse', 'gudang123')),
       name: 'Rudi (Staf Gudang)',
       role: 'warehouse',
       phone: '081288990013',
@@ -133,7 +165,7 @@ export function getSeedUsers() {
     {
       id: 'user-packing',
       username: 'packing',
-      passwordHash: hashPassword('packing123'),
+      passwordHash: hashPassword(getSeedPassword('packing', 'packing123')),
       name: 'Siti (Staf Packing)',
       role: 'packing',
       phone: '081288990014',
@@ -145,7 +177,7 @@ export function getSeedUsers() {
     {
       id: 'user-customer-reseller',
       username: 'customer',
-      passwordHash: hashPassword('customer123'),
+      passwordHash: hashPassword(getSeedPassword('customer', 'customer123')),
       name: 'Warung Bu Dewi',
       role: 'customer',
       phone: '081299887766',
@@ -157,7 +189,7 @@ export function getSeedUsers() {
     {
       id: 'user-customer-umum',
       username: 'customer_umum',
-      passwordHash: hashPassword('customer123'),
+      passwordHash: hashPassword(getSeedPassword('customer_umum', 'customer123')),
       name: 'Ibu Salma',
       role: 'customer',
       phone: '081299887767',
@@ -729,33 +761,61 @@ function getInitialData() {
 class Database {
   constructor() {
     this.data = null;
-    this.load();
+    this.redis = isRedisConfigured
+      ? new Redis({ url: redisUrl, token: redisToken })
+      : null;
   }
 
-  load() {
+  async load() {
+    if (this.redis) {
+      // Jalur Redis: JANGAN telan error, JANGAN fallback ke seed bila error!
+      const remoteData = await this.redis.get(REDIS_KEY);
+      if (remoteData !== null && remoteData !== undefined) {
+        this.data = typeof remoteData === 'string' ? JSON.parse(remoteData) : remoteData;
+      } else {
+        // Key memang belum ada: inisialisasi seed pertama kali
+        this.data = getInitialData();
+        await this.save();
+      }
+
+      if (!Array.isArray(this.data.users)) {
+        this.data.users = getSeedUsers();
+        await this.save();
+      }
+      return;
+    }
+
+    // Jalur File Lokal (fallback dev & test)
     try {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         this.data = JSON.parse(raw);
       } else {
         this.data = getInitialData();
-        this.save();
+        await this.save();
       }
     } catch (e) {
       console.error('Error loading db file, falling back to seed:', e);
       this.data = getInitialData();
-      this.save();
+      await this.save();
     }
 
-    // Migrasi database lama yang belum memiliki koleksi users.
-    // Jangan seed ulang bila users sengaja dikosongkan oleh admin.
     if (!Array.isArray(this.data.users)) {
       this.data.users = getSeedUsers();
-      this.save();
+      await this.save();
     }
   }
 
-  save() {
+  async save() {
+    if (!this.data) return;
+
+    if (this.redis) {
+      // Jalur Redis: error dilempar agar caller mengetahui kegagalan
+      await this.redis.set(REDIS_KEY, this.data);
+      return;
+    }
+
+    // Jalur File Lokal: toleransi try/catch seperti sebelumnya
     try {
       fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
     } catch (e) {
@@ -838,7 +898,7 @@ class Database {
     });
   }
 
-  updateProduct(id, updateData) {
+  async updateProduct(id, updateData) {
     const product = this.data.products.find(p => p.id === id);
     if (!product) return null;
 
@@ -857,11 +917,11 @@ class Database {
       product.spiceCategoryGroup = updateData.spiceCategoryGroup;
     }
 
-    this.save();
+    await this.save();
     return this.getProducts().find(p => p.id === id);
   }
 
-  deleteProduct(id) {
+  async deleteProduct(id) {
     const index = this.data.products.findIndex(p => p.id === id);
     if (index === -1) {
       return { success: false, message: 'Produk tidak ditemukan.' };
@@ -887,7 +947,7 @@ class Database {
     }
 
     const removed = this.data.products.splice(index, 1)[0];
-    this.save();
+    await this.save();
     return { success: true, data: removed };
   }
 
@@ -979,7 +1039,7 @@ class Database {
     return log;
   }
 
-  addNotification({ recipientType, recipientPhone, type, title, message }) {
+  async addNotification({ recipientType, recipientPhone, type, title, message }) {
     const notif = {
       id: 'notif-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       recipientType: recipientType || 'OWNER',
@@ -991,7 +1051,7 @@ class Database {
       createdAt: new Date().toISOString()
     };
     this.data.notifications.unshift(notif);
-    this.save();
+    await this.save();
     return notif;
   }
 }

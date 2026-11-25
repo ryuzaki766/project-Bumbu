@@ -10,9 +10,15 @@
     "frontend": "npm run --prefix frontend dev",
     "build": "npm run --prefix frontend build",
     "test": "node backend/scripts/simulate_flow.js",
-    "test:auth": "npm run --prefix backend test:auth"
+    "test:auth": "npm run --prefix backend test:auth",
+    "test:redis": "node backend/scripts/test_redis_error.js"
   },
   "dependencies": {
-    "concurrently": "^9.1.2"
+    "@upstash/redis": "^1.34.4",
+    "concurrently": "^9.1.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "xlsx": "^0.18.5"
   }
 }

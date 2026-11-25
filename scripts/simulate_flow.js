@@ -1,12 +1,36 @@
-import { db } from '../backend/db.js';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+// Gunakan database sementara agar pengujian tidak mengubah data operasional.
+const tempDb = path.join(os.tmpdir(), `alur-bumbu-simulasi-${Date.now()}-${Math.floor(Math.random() * 10000)}.json`);
+process.env.DB_FILE = tempDb;
+
+const { db } = await import('../backend/db.js');
 
 console.log('====================================================');
 console.log('🧪 PENGUJIAN OTOMATIS INTEGRASI ALUR PESANAN BUMBU');
 console.log('====================================================\n');
 
 try {
+  // Pastikan database dimuat secara async
+  await db.load();
+
   // 1. Check Initial State
   const initialProducts = db.getProducts();
+
+  // Seed satu batch awal agar pengujian FEFO dapat berjalan pada database bersih.
+  db.data.batches.push({
+    id: 'batch-sim-seed',
+    productId: 'prod-001',
+    batchNumber: 'SIM-SEED-01',
+    expiryDate: '2027-12-31',
+    initialQty: 100,
+    currentQty: 100,
+    supplierName: 'Seed Simulasi',
+    receivedAt: new Date().toISOString()
+  });
+  await db.save();
   const rendang = initialProducts.find(p => p.id === 'prod-001');
   console.log(`✓ 1. Data Produk terverifikasi: ${initialProducts.length} produk.`);
   console.log(`   - Bumbu Rendang: Stok Fisik=${rendang.totalPhysicalStock}, Dicadangkan=${rendang.reservedStock}, Tersedia=${rendang.availableStock}`);
@@ -48,7 +72,7 @@ try {
   };
 
   db.data.orders.unshift(order);
-  db.save();
+  await db.save();
 
   const stockAfterOrder = db.getProductStockSummary('prod-001');
   console.log(`✓ 2. Pesanan #${orderId} dibuat.`);
@@ -66,13 +90,13 @@ try {
   // 4. Staf Gudang resolves issue and marks SIAP DIPACKING (FR-06)
   order.status = 'SIAP_DIPACKING';
   order.items[0].checked = true;
-  db.save();
+  await db.save();
   console.log(`✓ 4. Staf Gudang menyelesaikan penyiapan: Status SIAP DIPACKING.`);
 
   // 5. Staf Packing packs order & assigns courier
   order.status = 'SUDAH_DIPACKING';
   order.courierName = 'Pak Agus (Kurir Motor)';
-  db.save();
+  await db.save();
   console.log(`✓ 5. Staf Packing memverifikasi item & menetapkan kurir "${order.courierName}".`);
 
   // 6. Courier Handover (Ship) -> FEFO deduction!
@@ -87,7 +111,7 @@ try {
   order.items[0].fefoAllocations = allocations;
   order.status = 'DIKIRIM';
   order.courierPickedUpAt = new Date().toISOString();
-  db.save();
+  await db.save();
 
   const stockAfterShip = db.getProductStockSummary('prod-001');
   console.log(`   - Status berubah ke DIKIRIM.`);
@@ -102,7 +126,7 @@ try {
     receivedBy: 'Staf Admin (Lina)',
     notes: 'Uang pas COD diterima dari kurir'
   };
-  db.save();
+  await db.save();
   console.log(`✓ 7. Staf Admin mencatat COD Rp ${order.totalAmount.toLocaleString('id-ID')} lunas (Status SELESAI).`);
 
   // 8. Test Return Order restoring to exact FEFO batch
@@ -115,7 +139,7 @@ try {
     if (targetBatch) targetBatch.currentQty += a.qty;
   });
   order.status = 'DIRETUR';
-  db.save();
+  await db.save();
   console.log(`✓ 8. Retur barang mengembalikan stok tepat ke Batch FEFO asal (${allocations[0].batchNumber}): ${qtyBeforeReturn} kg -> ${allocatedBatch.currentQty} kg.`);
 
   // 9. Test Supplier Goods-In
@@ -141,7 +165,7 @@ try {
     actor: 'Staf Gudang (Rudi)',
     notes: 'Penerimaan supplier pengujian'
   });
-  db.save();
+  await db.save();
   console.log(`✓ 9. Penerimaan supplier dicatat: Batch ${newBatch.batchNumber} (+30 kg).`);
 
   // 10. Test Stock Opname correction with mandatory reason
@@ -157,7 +181,7 @@ try {
     actor: 'Owner (Pak Haji Rahmat)',
     notes: 'Koreksi 1 kg selisih timbangan display (FR-16)'
   });
-  db.save();
+  await db.save();
   console.log(`✓ 10. Koreksi stok opname manual berhasil dicatat dengan alasan wajib (FR-16).`);
 
   console.log('\n====================================================');

@@ -76,7 +76,7 @@ router.get('/:id', authenticate, (req, res) => {
 });
 
 // POST create order (FR-01, FR-02, FR-04, FR-26) - khusus customer terautentikasi
-router.post('/', authenticate, authorize('customer'), (req, res) => {
+router.post('/', authenticate, authorize('customer'), async (req, res) => {
   try {
     const { customerAddress, notes, items } = req.body;
 
@@ -187,7 +187,7 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
       `📌 *Status*: ${hasPreOrder ? '⏳ Menunggu Produksi / Restock Bumbu' : 'Menunggu Disiapkan Staf Gudang'}\n\n` +
       `Anda dapat memantau status pesanan kapan saja di website kami dengan ID ${orderId}.`;
 
-    db.addNotification({
+    await db.addNotification({
       recipientType: 'CUSTOMER',
       recipientPhone: customerPhone,
       type: hasPreOrder ? 'PREORDER_BARU' : 'PESANAN_BARU',
@@ -196,7 +196,7 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
     });
 
     if (hasPreOrder) {
-      db.addNotification({
+      await db.addNotification({
         recipientType: 'WAREHOUSE',
         recipientPhone: db.data.settings.ownerPhone,
         type: 'PERINGATAN_PRODUKSI',
@@ -205,7 +205,7 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
       });
     }
 
-    db.save();
+    await db.save();
 
     res.status(201).json({
       success: true,
@@ -218,7 +218,7 @@ router.post('/', authenticate, authorize('customer'), (req, res) => {
 });
 
 // POST finish production for pre-order (Gudang/Admin/Owner: Menunggu Produksi -> Menunggu Disiapkan)
-router.post('/:id/finish-production', authenticate, authorize('warehouse', 'admin', 'owner'), (req, res) => {
+router.post('/:id/finish-production', authenticate, authorize('warehouse', 'admin', 'owner'), async (req, res) => {
   try {
     const order = db.data.orders.find(o => o.id === req.params.id);
     if (!order) {
@@ -242,7 +242,7 @@ router.post('/:id/finish-production', authenticate, authorize('warehouse', 'admi
       note: 'Stok bumbu telah selesai diproduksi/tersedia di rak. Pesanan siap diambil dan disiapkan staf gudang.'
     });
 
-    db.addNotification({
+    await db.addNotification({
       recipientType: 'CUSTOMER',
       recipientPhone: order.customerPhone,
       type: 'PRODUKSI_SELESAI',
@@ -250,7 +250,7 @@ router.post('/:id/finish-production', authenticate, authorize('warehouse', 'admi
       message: `Kabar baik *${order.customerName}*! Bumbu pesanan Pre-Order #${order.id} telah selesai diproduksi dan sekarang siap disiapkan staf gudang.`
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -263,7 +263,7 @@ router.post('/:id/finish-production', authenticate, authorize('warehouse', 'admi
 });
 
 // POST prepare order (Gudang -> Siap Dipacking) (FR-06)
-router.post('/:id/prepare', authenticate, authorize('warehouse', 'owner'), (req, res) => {
+router.post('/:id/prepare', authenticate, authorize('warehouse', 'owner'), async (req, res) => {
   try {
     const order = db.data.orders.find(o => o.id === req.params.id);
     if (!order) {
@@ -297,7 +297,7 @@ router.post('/:id/prepare', authenticate, authorize('warehouse', 'owner'), (req,
       note: 'Item pesanan selesai disiapkan dari rak gudang dan diletakkan di meja packing.'
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -310,7 +310,7 @@ router.post('/:id/prepare', authenticate, authorize('warehouse', 'owner'), (req,
 });
 
 // POST report shortage / issue during prep (FR-07)
-router.post('/:id/report-issue', authenticate, authorize('warehouse', 'owner'), (req, res) => {
+router.post('/:id/report-issue', authenticate, authorize('warehouse', 'owner'), async (req, res) => {
   try {
     const order = db.data.orders.find(o => o.id === req.params.id);
     if (!order) {
@@ -333,14 +333,14 @@ router.post('/:id/report-issue', authenticate, authorize('warehouse', 'owner'), 
     });
 
     // Notify Owner
-    db.addNotification({
+    await db.addNotification({
       recipientType: 'OWNER',
       type: 'KENDALA_PESANAN',
       title: '⚠️ Kendala Pesanan Gudang',
       message: `Peringatan: Pesanan #${order.id} untuk customer ${order.customerName} ditandai BERMASALAH oleh ${actor || 'Staf Gudang'}.\nAlasan: ${issueReason}`
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -353,7 +353,7 @@ router.post('/:id/report-issue', authenticate, authorize('warehouse', 'owner'), 
 });
 
 // POST pack order (Staf Packing -> Sudah Dipacking) (FR-08, FR-09, FR-10)
-router.post('/:id/pack', authenticate, authorize('packing', 'owner'), (req, res) => {
+router.post('/:id/pack', authenticate, authorize('packing', 'owner'), async (req, res) => {
   try {
     const order = db.data.orders.find(o => o.id === req.params.id);
     if (!order) {
@@ -388,7 +388,7 @@ router.post('/:id/pack', authenticate, authorize('packing', 'owner'), (req, res)
       note: `Pesanan selesai dipacking dan diverifikasi. Kurir penjemput: ${order.courierName}. Slip pesanan siap dicetak.`
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -401,7 +401,7 @@ router.post('/:id/pack', authenticate, authorize('packing', 'owner'), (req, res)
 });
 
 // POST ship order (Kurir Ambil di Gudang -> DIKIRIM) (FR-11, FR-14, FR-28, FEFO)
-router.post('/:id/ship', authenticate, authorize('packing', 'owner'), (req, res) => {
+router.post('/:id/ship', authenticate, authorize('packing', 'owner'), async (req, res) => {
   try {
     const order = db.data.orders.find(o => o.id === req.params.id);
     if (!order) {
@@ -482,7 +482,7 @@ router.post('/:id/ship', authenticate, authorize('packing', 'owner'), (req, res)
       const product = db.data.products.find(p => p.id === item.productId);
       const updatedStock = db.getProductStockSummary(item.productId);
       if (product && updatedStock.totalPhysicalStock <= product.minStock) {
-        db.addNotification({
+        await db.addNotification({
           recipientType: 'OWNER',
           type: 'STOK_MENIPIS',
           title: '⚠️ Peringatan Stok Menipis',
@@ -508,7 +508,7 @@ router.post('/:id/ship', authenticate, authorize('packing', 'owner'), (req, res)
       `• *Waktu Jemput*: ${new Date().toLocaleTimeString('id-ID')} WIB\n\n` +
       `_Sistem Otomatis Alur Bumbu_`;
 
-    db.addNotification({
+    await db.addNotification({
       recipientType: 'OWNER',
       type: 'BARANG_KELUAR',
       title: '🚚 Barang Keluar / Dikirim',
@@ -519,7 +519,7 @@ router.post('/:id/ship', authenticate, authorize('packing', 'owner'), (req, res)
     const waCustomerMsg = `Halo *${order.customerName}*, pesanan Anda *#${order.id}* saat ini *SEDANG DIKIRIM* oleh kurir *${order.courierName}*.\n\n` +
       `Mohon siapkan uang pembayaran COD sebesar *Rp ${order.totalAmount.toLocaleString('id-ID')}* saat kurir tiba. Terima kasih!`;
 
-    db.addNotification({
+    await db.addNotification({
       recipientType: 'CUSTOMER',
       recipientPhone: order.customerPhone,
       type: 'CUSTOMER_DIKIRIM',
@@ -527,7 +527,7 @@ router.post('/:id/ship', authenticate, authorize('packing', 'owner'), (req, res)
       message: waCustomerMsg
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -540,7 +540,7 @@ router.post('/:id/ship', authenticate, authorize('packing', 'owner'), (req, res)
 });
 
 // POST complete order (Customer confirms receipt) (FR-11)
-router.post('/:id/complete', authenticate, authorize('admin', 'owner'), (req, res) => {
+router.post('/:id/complete', authenticate, authorize('admin', 'owner'), async (req, res) => {
   try {
     const order = db.data.orders.find(o => o.id === req.params.id);
     if (!order) {
@@ -566,7 +566,7 @@ router.post('/:id/complete', authenticate, authorize('admin', 'owner'), (req, re
     });
 
     // Customer Notification (FR-23)
-    db.addNotification({
+    await db.addNotification({
       recipientType: 'CUSTOMER',
       recipientPhone: order.customerPhone,
       type: 'CUSTOMER_SELESAI',
@@ -574,7 +574,7 @@ router.post('/:id/complete', authenticate, authorize('admin', 'owner'), (req, re
       message: `Terima kasih *${order.customerName}*! Pesanan #${order.id} telah berstatus Selesai. Selamat memasak hidangan istimewa dengan rempah pilihan kami!`
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -587,7 +587,7 @@ router.post('/:id/complete', authenticate, authorize('admin', 'owner'), (req, re
 });
 
 // POST record COD cash receipt (Admin) (FR-30)
-router.post('/:id/pay-cod', authenticate, authorize('admin', 'owner'), (req, res) => {
+router.post('/:id/pay-cod', authenticate, authorize('admin', 'owner'), async (req, res) => {
   try {
     const order = db.data.orders.find(o => o.id === req.params.id);
     if (!order) {
@@ -644,7 +644,7 @@ router.post('/:id/pay-cod', authenticate, authorize('admin', 'owner'), (req, res
       note: `Penerimaan uang COD sebesar Rp ${amount.toLocaleString('id-ID')} dicatat lunas oleh ${receivedBy || 'Staf Admin'}.`
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -657,7 +657,7 @@ router.post('/:id/pay-cod', authenticate, authorize('admin', 'owner'), (req, res
 });
 
 // POST cancel order before shipment (FR-12) - automatically releases reserved stock
-router.post('/:id/cancel', authenticate, authorize('admin', 'owner', 'customer'), (req, res) => {
+router.post('/:id/cancel', authenticate, authorize('admin', 'owner', 'customer'), async (req, res) => {
   try {
     const order = db.data.orders.find(o => o.id === req.params.id);
     if (!order) {
@@ -690,7 +690,7 @@ router.post('/:id/cancel', authenticate, authorize('admin', 'owner', 'customer')
       note: `Pesanan dibatalkan. Stok yang dicadangkan otomatis dilepas kembali ke stok tersedia. Alasan: ${order.cancelReason}`
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,
@@ -703,7 +703,7 @@ router.post('/:id/cancel', authenticate, authorize('admin', 'owner', 'customer')
 });
 
 // POST return goods received at warehouse (Retur barang) (Section 7)
-router.post('/:id/return', authenticate, authorize('admin', 'warehouse', 'owner'), (req, res) => {
+router.post('/:id/return', authenticate, authorize('admin', 'warehouse', 'owner'), async (req, res) => {
   try {
     const order = db.data.orders.find(o => o.id === req.params.id);
     if (!order) {
@@ -775,7 +775,7 @@ router.post('/:id/return', authenticate, authorize('admin', 'warehouse', 'owner'
       note: `Retur barang diproses dan stok dikembalikan ke sistem. Alasan: ${returnReason}`
     });
 
-    db.save();
+    await db.save();
 
     res.json({
       success: true,

@@ -87,7 +87,7 @@ router.get('/me', authenticate, (req, res) => {
 });
 
 // POST /api/auth/register
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
   try {
     const {
       name,
@@ -181,7 +181,7 @@ router.post('/register', (req, res) => {
     };
 
     db.data.users.push(newUser);
-    db.save();
+    await db.save();
 
     loginAttempts.delete(ipKey);
 

@@ -530,7 +530,42 @@
     }
   ],
   "batches": [],
-  "orders": [],
+  "orders": [
+    {
+      "id": "ORD-TEST-1795500014898",
+      "customerName": "Test Warung Bu Dewi",
+      "customerPhone": "081299887766",
+      "customerAddress": "Jl. Uji Coba No. 12",
+      "customerType": "reseller",
+      "notes": "Uji coba otomatis",
+      "status": "SUDAH_DIPACKING",
+      "paymentMethod": "COD",
+      "paymentStatus": "BELUM_LUNAS",
+      "courierName": "Pak Agus (Kurir Motor)",
+      "items": [
+        {
+          "productId": "prod-001",
+          "productName": "Bumbu Bali 1 Kg",
+          "unit": "pack (1 Kg)",
+          "qty": 2,
+          "price": 47000,
+          "subtotal": 94000,
+          "checked": true
+        }
+      ],
+      "totalAmount": 94000,
+      "createdAt": "2026-11-24T06:00:14.898Z",
+      "statusHistory": [
+        {
+          "status": "MENUNGGU_DISIAPKAN",
+          "actor": "Customer (Test)",
+          "timestamp": "2026-11-24T06:00:14.899Z",
+          "note": "Pesanan dibuat"
+        }
+      ],
+      "issueReason": "Uji coba kendala penyiapan"
+    }
+  ],
   "stockLogs": [],
   "notifications": [],
   "settings": {

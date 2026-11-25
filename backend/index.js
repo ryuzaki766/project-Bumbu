@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
+import db from './db.js';
 import authRouter from './routes/auth.js';
 import productsRouter from './routes/products.js';
 import ordersRouter from './routes/orders.js';
@@ -25,12 +26,72 @@ const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 app.use(cors({
-  origin: '*',
+  origin: process.env.FRONTEND_URL || '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
+
+// Middleware Antrean Permintaan (Promise Queue per Instance) untuk Sinkronisasi DB
+let requestQueue = Promise.resolve();
+
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api')) {
+    return next();
+  }
+
+  const previousRequest = requestQueue;
+  let releaseQueue;
+  const currentRequestPromise = new Promise(resolve => {
+    releaseQueue = resolve;
+  });
+
+  requestQueue = previousRequest.then(() => currentRequestPromise);
+
+  let released = false;
+  const onFinished = () => {
+    if (!released) {
+      released = true;
+      releaseQueue();
+    }
+  };
+
+  // Pasang listener SEGERA saat request masuk
+  res.once('finish', onFinished);
+  res.once('close', onFinished);
+
+  previousRequest
+    .then(async () => {
+      // Cek apakah client sudah memutus koneksi sebelum giliran tiba
+      if (res.destroyed || res.writableEnded) {
+        onFinished();
+        return;
+      }
+
+      try {
+        await db.load();
+        next();
+      } catch (err) {
+        onFinished();
+        console.error('[DATABASE LOAD ERROR]:', err);
+        res.status(500).json({
+          success: false,
+          message: 'Terjadi kesalahan internal pada server database.'
+        });
+      }
+    })
+    .catch(err => {
+      onFinished();
+      console.error('[QUEUE PIPELINE ERROR]:', err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Terjadi kesalahan internal pada antrean server.'
+        });
+      }
+    });
+});
 
 // API Routes
 app.use('/api/auth', authRouter);
@@ -90,11 +151,15 @@ app.use((req, res, next) => {
   `);
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`===============================================`);
-  console.log(`🌿 Alur Bumbu Backend API berjalan pada:`);
-  console.log(`   👉 http://localhost:${PORT}`);
-  console.log(`   👉 http://127.0.0.1:${PORT}`);
-  console.log(`📡 Frontend diarahkan ke: ${FRONTEND_URL}`);
-  console.log(`===============================================`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`===============================================`);
+    console.log(`🌿 Alur Bumbu Backend API berjalan pada:`);
+    console.log(`   👉 http://localhost:${PORT}`);
+    console.log(`   👉 http://127.0.0.1:${PORT}`);
+    console.log(`📡 Frontend diarahkan ke: ${FRONTEND_URL}`);
+    console.log(`===============================================`);
+  });
+}
+
+export default app;
